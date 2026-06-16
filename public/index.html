@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>وصل أحمد PRO</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f4f9; color: #333; }
+        .container { max-width: 500px; margin: 0 auto 30px auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        input, select { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background-color: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        button:hover { background-color: #219653; }
+        
+        .dashboard { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
+        th { background-color: #2c3e50; color: white; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .stats { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #2c3e50; }
+        
+        /* أزرار الإجراءات */
+        .btn-delete { background-color: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-left: 5px; }
+        .btn-delete:hover { background-color: #c0392b; }
+        .btn-edit { background-color: #f39c12; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+        .btn-edit:hover { background-color: #d35400; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 id="formTitle">إنشاء وصل جديد</h2>
+    <input type="hidden" id="editOrderId" value="">
+    <input type="text" id="cName" placeholder="اسم الزبون">
+    <input type="text" id="cPhone" placeholder="رقم الهاتف">
+    <input type="text" id="cAddress" placeholder="العنوان">
+    <input type="text" id="cProduct" placeholder="اسم المادة">
+    <input type="number" id="cPrice" placeholder="سعر المادة">
+    <input type="number" id="cDelivery" placeholder="أجور التوصيل">
+    <select id="cCurrency">
+        <option value="دينار عراقي">دينار عراقي</option>
+        <option value="دولار أمريكي">دولار أمريكي</option>
+    </select>
+    <button id="submitBtn" onclick="saveAndPrint()">حفظ وطباعة الوصل</button>
+</div>
+
+<div class="dashboard">
+    <h2>سجل الأوصال المخزونة (Dashboard)</h2>
+    <div class="stats" id="totalStats">جاري تحميل السجل...</div>
+    <table>
+        <thead>
+            <tr>
+                <th>رقم الوصل</th>
+                <th>التاريخ</th>
+                <th>اسم الزبون</th>
+                <th>رقم الهاتف</th>
+                <th>العنوان</th>
+                <th>المادة</th>
+                <th>المجموع الكلي</th>
+                <th>الإجراءات</th>
+            </tr>
+        </thead>
+        <tbody id="ordersTableBody">
+            <!-- البيانات تنزل تلقائياً -->
+        </tbody>
+    </table>
+</div>
+
+<script>
+    window.onload = loadOrders;
+
+    function loadOrders() {
+        fetch('/get-orders')
+        .then(res => res.json())
+        .then(data => {
+            if(data.success) {
+                const tbody = document.getElementById('ordersTableBody');
+                tbody.innerHTML = '';
+                
+                let totalIQD = 0;
+                let totalUSD = 0;
+
+                data.orders.forEach(order => {
+                    if(order.currency === 'دينار عراقي') totalIQD += order.total;
+                    if(order.currency === 'دولار أمريكي') totalUSD += order.total;
+
+                    const row = `<tr>
+                        <td>#00${order.id}</td>
+                        <td>${order.date}</td>
+                        <td>${order.name}</td>
+                        <td>${order.phone}</td>
+                        <td>${order.address}</td>
+                        <td>${order.product}</td>
+                        <td>${order.total.toLocaleString()} ${order.currency}</td>
+                        <td>
+                            <button class="btn-edit" onclick="prepareEdit(${JSON.stringify(order).replace(/"/g, '&quot;')})">تعديل</button>
+                            <button class="btn-delete" onclick="deleteOrder(${order.id})">حذف</button>
+                        </td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+
+                document.getElementById('totalStats').innerHTML = `إجمالي المبيعات بالسجل: ${totalIQD.toLocaleString()} د.ع | ${totalUSD.toLocaleString()} $`;
+            }
+        });
+    }
+
+    function saveAndPrint() {
+        const editId = document.getElementById('editOrderId').value;
+        
+        const orderData = {
+            name: document.getElementById('cName').value,
+            phone: document.getElementById('cPhone').value,
+            address: document.getElementById('cAddress').value,
+            product: document.getElementById('cProduct').value,
+            price: parseFloat(document.getElementById('cPrice').value) || 0,
+            delivery: parseFloat(document.getElementById('cDelivery').value) || 0,
+            currency: document.getElementById('cCurrency').value
+        };
+        orderData.total = orderData.price + orderData.delivery;
+
+        // إذا كان تعديلاً لوصل قديم
+        if (editId) {
+            fetch(`/update-order/${editId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(orderData)
+            })
+            .then(res => res.json())
+            .then(result => {
+                if(result.success) {
+                    alert("تم تعديل الوصل بنجاح!");
+                    resetForm();
+                    loadOrders();
+                }
+            });
+            return;
+        }
+
+        // إذا كان وصلاً جديداً تماماً
+        fetch('/save-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(orderData)
+        })
+        .then(res => res.json())
+        .then(result => {
+            if(result.success) {
+                loadOrders();
+                openPrintWindow(result.id, orderData);
+            } else {
+                alert("حدث خطأ أثناء حفظ الوصل!");
+            }
+        });
+    }
+
+    // وظيفة حذف الوصل
+    function deleteOrder(id) {
+        if(confirm("هل أنت متأكد من حذف هذا الوصل نهائياً؟")) {
+            fetch(`/delete-order/${id}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(result => {
+                if(result.success) {
+                    loadOrders(); // إعادة تحميل الجدول فوراً
+                } else {
+                    alert("فشل الحذف!");
+                }
+            });
+        }
+    }
+
+    // تجهيز الفورم للتعديل عند الضغط على زر تعديل
+    function prepareEdit(order) {
+        document.getElementById('formTitle').innerText = `تعديل الوصل رقم #00${order.id}`;
+        document.getElementById('editOrderId').value = order.id;
+        document.getElementById('cName').value = order.name;
+        document.getElementById('cPhone').value = order.phone;
+        document.getElementById('cAddress').value = order.address;
+        document.getElementById('cProduct').value = order.product;
+        document.getElementById('cPrice').value = order.price;
+        document.getElementById('cDelivery').value = order.delivery;
+        document.getElementById('cCurrency').value = order.currency;
+        document.getElementById('submitBtn').innerText = "تحديث البيانات وحفظها";
+        window.scrollTo(0,0); // الصعود لأعلى الصفحة للفورم
+    }
+
+    function resetForm() {
+        document.getElementById('formTitle').innerText = "إنشاء وصل جديد";
+        document.getElementById('editOrderId').value = "";
+        document.getElementById('cName').value = "";
+        document.getElementById('cPhone').value = "";
+        document.getElementById('cAddress').value = "";
+        document.getElementById('cProduct').value = "";
+        document.getElementById('cPrice').value = "";
+        document.getElementById('cDelivery').value = "";
+        document.getElementById('submitBtn').innerText = "حفظ وطباعة الوصل";
+    }
+
+    function openPrintWindow(id, orderData) {
+        const receiptWindow = window.open('', '_blank');
+        receiptWindow.document.write(`
+            <html lang="ar" dir="rtl">
+            <head>
+                <title>وصل رقم ${id}</title>
+                <style>
+                    body { font-family: sans-serif; padding: 30px; color: #333; direction: rtl; }
+                    .invoice-box { max-width: 600px; margin: auto; border: 2px solid #2c3e50; padding: 20px; border-radius: 8px; background: #fff; }
+                    .header-table { width: 100%; border: none; margin-bottom: 20px; }
+                    .header-table td { border: none; text-align: right; padding: 0; }
+                    .header-table .left-side { text-align: left; }
+                    .title { font-size: 26px; color: #2c3e50; font-weight: bold; margin: 0; }
+                    .info-section { margin-bottom: 25px; background: #f8f9fa; padding: 15px; border-radius: 6px; border-right: 4px solid #27ae60; }
+                    .info-section p { margin: 5px 0; font-size: 15px; }
+                    .details-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                    .details-table th, .details-table td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+                    .details-table th { background-color: #2c3e50; color: white; font-size: 14px; }
+                    .total-row { font-weight: bold; background-color: #eaeaea; }
+                    .footer-section { margin-top: 40px; display: flex; justify-content: space-between; font-size: 14px; }
+                    .signature { border-top: 1px dashed #333; width: 150px; margin-top: 25px; text-align: center; padding-top: 5px; }
+                    .print-btn { display: block; width: 100%; max-width: 200px; margin: 20px auto 0 auto; padding: 10px; background: #27ae60; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; text-align: center; }
+                    @media print { .print-btn { display: none; } body { padding: 0; } .invoice-box { border: none; } }
+                </style>
+            </head>
+            <body>
+                <div class="invoice-box">
+                    <table class="header-table">
+                        <tr>
+                            <td>
+                                <h1 class="title">أحمد PRO للخدمات التجارية</h1>
+                                <span style="font-size: 13px; color: #777;">بغداد، العراق</span>
+                            </td>
+                            <td class="left-side">
+                                <h2 style="color: #27ae60; margin: 0;">وصل قبض للزبون</h2>
+                                <span style="font-size: 14px; font-weight: bold;">رقم الوصل: #00${id}</span><br>
+                                <span style="font-size: 13px; color: #555;">التاريخ: ${new Date().toISOString().split('T')[0]}</span>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <div class="info-section">
+                        <p><strong>تفاصيل الزبون:</strong></p>
+                        <p>اسم الزبون: ${orderData.name}</p>
+                        <p>رقم الهاتف: ${orderData.phone}</p>
+                        <p>عنوان السكن: ${orderData.address}</p>
+                    </div>
+
+                    <table class="details-table">
+                        <thead>
+                            <tr>
+                                <th>تفاصيل المادة المشحونة / المباعة</th>
+                                <th>السعر الصافي</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>${orderData.product}</td>
+                                <td>${orderData.price.toLocaleString()} ${orderData.currency}</td>
+                            </tr>
+                            <tr>
+                                <td style="text-align: left; font-weight: left; font-weight: bold;">أجور التوصيل والخدمات</td>
+                                <td>${orderData.delivery.toLocaleString()} ${orderData.currency}</td>
+                            </tr>
+                            <tr class="total-row">
+                                <td style="text-align: left;">المجموع الكلي المطلوب دفعه</td>
+                                <td style="color: #c0392b; font-size: 16px;">${orderData.total.toLocaleString()} ${orderData.currency}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="footer-section">
+                        <div>
+                            <p>شاكرين ثقتكم بنا</p>
+                            <p style="font-size: 11px; color: #777;">* يرجى الاحتفاظ بالوصل لضمان حقك.</p>
+                        </div>
+                        <div>
+                            <div class="signature">توقيع المستلم / المحاسب</div>
+                        </div>
+                    </div>
+                </div>
+                <button class="print-btn" onclick="window.print()">اضغط هنا للطباعة الفورية</button>
+            </body>
+            </html>
+        `);
+    }
+</script>
+
+</body>
+</html>
